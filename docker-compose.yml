@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "8080:80"
     environment:
       - JAVA_OPTS=-Xmx512m -Xms256m
     container_name: dinh-minh-ngoc-thang-app

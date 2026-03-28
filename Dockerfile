@@ -14,6 +14,7 @@ WORKDIR /app
 # Copy JAR from builder
 COPY --from=builder /build/target/*.jar app.jar
 
-EXPOSE 8080
+ENV SERVER_PORT=80
+EXPOSE 80
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
