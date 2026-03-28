@@ -9,8 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOCKER_USER_RESOLVED: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKER_PASSWORD }}
+      # Dùng một trong hai bộ tên (cùng cặp user + token). Ưu tiên DOCKER_* rồi tới DOCKERHUB_*.
+      DOCKER_USER_RESOLVED: ${{ secrets.DOCKER_USERNAME || secrets.DOCKERHUB_USERNAME }}
+      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKER_PASSWORD || secrets.DOCKERHUB_TOKEN }}
 
     steps:
     - name: Checkout code
@@ -31,11 +32,11 @@ jobs:
     - name: Kiểm tra secret Docker Hub
       run: |
         if [ -z "${DOCKER_USER_RESOLVED}" ] || [ -z "${DOCKER_PASS_RESOLVED}" ]; then
-          echo "::error::Thiếu DOCKER_USERNAME hoặc DOCKER_PASSWORD."
-          echo "Vào Settings → Secrets and variables → Actions → tạo đúng hai tên sau (Repository secrets):"
-          echo "  DOCKER_USERNAME = Docker ID (vd: ngocthang8424), không dùng email."
-          echo "  DOCKER_PASSWORD = Personal Access Token từ https://hub.docker.com/settings/security (Read & Write)."
-          echo "Xóa các secret Docker cũ trùng tên sai hoặc cặp DOCKERHUB_* nếu không dùng nữa để tránh nhầm."
+          echo "::error::Thiếu cặp secret Docker Hub (user + token)."
+          echo "Vào Settings → Secrets and variables → Actions → Repository secrets, tạo đủ một cặp:"
+          echo "  (A) DOCKER_USERNAME + DOCKER_PASSWORD  — hoặc —  (B) DOCKERHUB_USERNAME + DOCKERHUB_TOKEN"
+          echo "  User = Docker ID (vd: ngocthang8424), không dùng email."
+          echo "  Password/token = Personal Access Token https://hub.docker.com/settings/security (Read & Write)."
           exit 1
         fi
 
