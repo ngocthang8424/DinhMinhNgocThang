@@ -50,9 +50,8 @@ jobs:
             exit 1
           fi
           case "$p" in dckr_pat_*)
-            if [ "${#p}" -lt 48 ]; then
-              echo "::error::PAT Docker Hub thường dài hơn — có thể bạn chỉ copy được một nửa. Generate lại: https://hub.docker.com/settings/security và copy TOÀN BỘ một dòng."
-              exit 1
+            if [ "${#p}" -lt 50 ]; then
+              echo "::warning::Token chỉ ${#p} ký tự — PAT Docker Hub sau khi Generate thường dài hơn (thường ~50–120+). Nếu bước sau vẫn unauthorized: tạo token MỚI, dán vào Notepad kiểm tra đủ một dòng, rồi Update secret DOCKERHUB_TOKEN."
             fi
             ;;
           *)
