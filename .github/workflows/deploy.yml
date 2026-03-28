@@ -43,13 +43,23 @@ jobs:
             exit 1
             ;;
           esac
-          echo "::notice::Sau chuẩn hóa: độ dài username=${#u}, token=${#p} (token PAT thường > 40 ký tự, bắt đầu dckr_pat_)"
-          if [ "${#p}" -lt 20 ]; then
-            echo "::error::Token quá ngắn — tạo PAT mới: https://hub.docker.com/settings/security (Read & Write), dán cả chuỗi vào DOCKER_PASSWORD hoặc DOCKERHUB_TOKEN."
+          echo "::notice::Sau chuẩn hóa: độ dài username=${#u}, token=${#p}"
+          if [ "${#u}" -lt 1 ] || [ "${#u}" -gt 30 ]; then
+            echo "::error::DOCKER_USERNAME sai: Docker ID hợp lệ thường 4–30 ký tự (vd ngocthang8424). Bạn đang có ${#u} ký tự → gần như chắc dán nhầm (URL, câu dài, copy nhầm secret khác)."
+            echo "Sửa: https://hub.docker.com đăng nhập → góc phải avatar → Account settings → chỉ lấy \"Username\" ngắn, KHÔNG email, KHÔNG link."
             exit 1
           fi
-          case "$p" in dckr_pat_*) ;; *)
-            echo "::warning::Token không bắt đầu bằng dckr_pat_ — thường không phải Personal Access Token Docker Hub."
+          case "$p" in dckr_pat_*)
+            if [ "${#p}" -lt 48 ]; then
+              echo "::error::PAT Docker Hub thường dài hơn — có thể bạn chỉ copy được một nửa. Generate lại: https://hub.docker.com/settings/security và copy TOÀN BỘ một dòng."
+              exit 1
+            fi
+            ;;
+          *)
+            echo "::error::DOCKER_PASSWORD phải là Personal Access Token từ Docker Hub (chuỗi dài, bắt đầu dckr_pat_)."
+            echo "KHÔNG dùng: mật khẩu đăng nhập Hub, token GitHub (ghp_), tên token (vd github-actions), hay chuỗi ngắn ${#p} ký tự."
+            echo "Làm lại: Hub → Account Settings → Security → Personal access tokens → Generate new token (Read & Write) → Copy ngay (một dòng dài) → GitHub secret DOCKER_PASSWORD."
+            exit 1
             ;;
           esac
           printf '%s' "$p" | docker login docker.io --username "$u" --password-stdin
