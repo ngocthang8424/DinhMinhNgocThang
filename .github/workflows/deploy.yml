@@ -9,9 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Dùng một trong hai bộ tên (cùng cặp user + token). Ưu tiên DOCKER_* rồi tới DOCKERHUB_*.
-      DOCKER_USER_RESOLVED: ${{ secrets.DOCKER_USERNAME || secrets.DOCKERHUB_USERNAME }}
-      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKER_PASSWORD || secrets.DOCKERHUB_TOKEN }}
+      # Một cặp user+token. Ưu tiên DOCKERHUB_* (tránh cặp DOCKER_* cũ/sai che token đúng).
+      DOCKER_USER_RESOLVED: ${{ secrets.DOCKERHUB_USERNAME || secrets.DOCKER_USERNAME }}
+      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKER_PASSWORD }}
 
     steps:
     - name: Checkout code
@@ -34,7 +34,7 @@ jobs:
         if [ -z "${DOCKER_USER_RESOLVED}" ] || [ -z "${DOCKER_PASS_RESOLVED}" ]; then
           echo "::error::Thiếu cặp secret Docker Hub (user + token)."
           echo "Vào Settings → Secrets and variables → Actions → Repository secrets, tạo đủ một cặp:"
-          echo "  (A) DOCKER_USERNAME + DOCKER_PASSWORD  — hoặc —  (B) DOCKERHUB_USERNAME + DOCKERHUB_TOKEN"
+          echo "  (A) DOCKERHUB_USERNAME + DOCKERHUB_TOKEN  — hoặc —  (B) DOCKER_USERNAME + DOCKER_PASSWORD"
           echo "  User = Docker ID (vd: ngocthang8424), không dùng email."
           echo "  Password/token = Personal Access Token https://hub.docker.com/settings/security (Read & Write)."
           exit 1
@@ -43,16 +43,22 @@ jobs:
     - name: Login to Docker Hub
       run: |
         set -e
-        u=$(printf '%s' "${DOCKER_USER_RESOLVED}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
-        p=$(printf '%s' "${DOCKER_PASS_RESOLVED}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        # Bỏ UTF-8 BOM + CR (Word/Windows hay copy vào secret) — lỗi thường gặp unauthorized
+        u=$(printf '%s' "${DOCKER_USER_RESOLVED}" | sed '1s/^\xEF\xBB\xBF//' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+        p=$(printf '%s' "${DOCKER_PASS_RESOLVED}" | sed '1s/^\xEF\xBB\xBF//' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         case "$u" in
           *@*)
-            echo "::error::DOCKER_USERNAME không được là email. Dùng Docker ID hiển thị trên hub.docker.com (thường là ngocthang8424)."
+            echo "::error::Username không được là email. Secret user phải là Docker ID (vd ngocthang8424)."
             exit 1
             ;;
         esac
+        echo "::notice::Sau chuẩn hóa: độ dài username=${#u} token=${#p}"
+        case "$p" in dckr_pat_*) ;; *)
+          echo "::warning::Token không bắt đầu bằng dckr_pat_ — cần Personal Access Token từ hub.docker.com/settings/security, không dùng mật khẩu web."
+          ;;
+        esac
         if [ "${#p}" -lt 24 ]; then
-          echo "::warning::DOCKER_PASSWORD có vẻ quá ngắn — cần dán cả chuỗi token (thường bắt đầu bằng dckr_pat_), không phải tên token hay mật khẩu web."
+          echo "::warning::Token quá ngắn — kiểm tra đã dán đủ cả chuỗi sau khi Generate."
         fi
         printf '%s' "$p" | docker login docker.io --username "$u" --password-stdin
         echo "DOCKER_USER_NORMALIZED=${u}" >> "${GITHUB_ENV}"
