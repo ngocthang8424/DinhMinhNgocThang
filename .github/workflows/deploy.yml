@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Ưu tiên DOCKERHUB_*; nếu trống dùng DOCKER_* (đúng tên trong bài mẫu CI/CD lớp)
+      DOCKER_USER_RESOLVED: ${{ secrets.DOCKERHUB_USERNAME || secrets.DOCKER_USERNAME }}
+      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKER_PASSWORD }}
 
     steps:
     - name: Checkout code
@@ -25,11 +29,21 @@ jobs:
     - name: Build with Maven
       run: ./mvnw clean package -DskipTests
 
+    - name: Kiểm tra secret Docker Hub
+      run: |
+        if [ -z "${DOCKER_USER_RESOLVED}" ] || [ -z "${DOCKER_PASS_RESOLVED}" ]; then
+          echo "::error::Thiếu username hoặc token. Vào Settings → Secrets and variables → Actions và thêm một trong hai bộ (cùng một cặp):"
+          echo "  1) DOCKERHUB_USERNAME + DOCKERHUB_TOKEN"
+          echo "  2) DOCKER_USERNAME + DOCKER_PASSWORD — token = Personal Access Token trên hub.docker.com, không dùng mật khẩu web."
+          exit 1
+        fi
+
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        registry: docker.io
+        username: ${{ env.DOCKER_USER_RESOLVED }}
+        password: ${{ env.DOCKER_PASS_RESOLVED }}
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -40,13 +54,13 @@ jobs:
         context: .
         push: true
         tags: |
-          ${{ secrets.DOCKERHUB_USERNAME }}/dinhminhngocthang-app:latest
-          ${{ secrets.DOCKERHUB_USERNAME }}/dinhminhngocthang-app:${{ github.sha }}
+          ${{ env.DOCKER_USER_RESOLVED }}/dinhminhngocthang-app:latest
+          ${{ env.DOCKER_USER_RESOLVED }}/dinhminhngocthang-app:${{ github.sha }}
         platforms: linux/amd64,linux/arm64
 
     - name: Triển khai lên slot S5
       run: |
-        REPO="${{ secrets.DOCKERHUB_USERNAME }}/dinhminhngocthang-app"
+        REPO="${DOCKER_USER_RESOLVED}/dinhminhngocthang-app"
         CONTAINER_PORT=80
         RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "${{ secrets.DEPLOY_URL }}?repo=$REPO&tag=latest&slot=5&container_port=$CONTAINER_PORT&strict_container_port=0")
         BODY=$(echo "$RESPONSE" | sed '$d')
