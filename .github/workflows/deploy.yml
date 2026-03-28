@@ -1,4 +1,4 @@
-name: Build and Push to Docker Hub
+name: CI/CD Docker
 
 on:
   push:
@@ -6,92 +6,25 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
-    env:
-      # Một cặp user+token. Ưu tiên DOCKERHUB_* (tránh cặp DOCKER_* cũ/sai che token đúng).
-      DOCKER_USER_RESOLVED: ${{ secrets.DOCKERHUB_USERNAME || secrets.DOCKER_USERNAME }}
-      DOCKER_PASS_RESOLVED: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKER_PASSWORD }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      # 1. Lấy code
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
+      # 2. Login Docker Hub
+      - name: Login Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Make mvnw executable
-      run: chmod +x ./mvnw
-
-    - name: Build with Maven
-      run: ./mvnw clean package -DskipTests
-
-    - name: Kiểm tra secret Docker Hub
-      run: |
-        if [ -z "${DOCKER_USER_RESOLVED}" ] || [ -z "${DOCKER_PASS_RESOLVED}" ]; then
-          echo "::error::Thiếu cặp secret Docker Hub (user + token)."
-          echo "Vào Settings → Secrets and variables → Actions → Repository secrets, tạo đủ một cặp:"
-          echo "  (A) DOCKERHUB_USERNAME + DOCKERHUB_TOKEN  — hoặc —  (B) DOCKER_USERNAME + DOCKER_PASSWORD"
-          echo "  User = Docker ID (vd: ngocthang8424), không dùng email."
-          echo "  Password/token = Personal Access Token https://hub.docker.com/settings/security (Read & Write)."
-          exit 1
-        fi
-
-    - name: Login to Docker Hub
-      run: |
-        set -e
-        # Bỏ UTF-8 BOM + CR (Word/Windows hay copy vào secret) — lỗi thường gặp unauthorized
-        u=$(printf '%s' "${DOCKER_USER_RESOLVED}" | sed '1s/^\xEF\xBB\xBF//' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
-        p=$(printf '%s' "${DOCKER_PASS_RESOLVED}" | sed '1s/^\xEF\xBB\xBF//' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        case "$u" in
-          *@*)
-            echo "::error::Username không được là email. Secret user phải là Docker ID (vd ngocthang8424)."
-            exit 1
-            ;;
-        esac
-        echo "::notice::Sau chuẩn hóa: độ dài username=${#u} token=${#p}"
-        case "$p" in dckr_pat_*) ;; *)
-          echo "::warning::Token không bắt đầu bằng dckr_pat_ — cần Personal Access Token từ hub.docker.com/settings/security, không dùng mật khẩu web."
-          ;;
-        esac
-        if [ "${#p}" -lt 24 ]; then
-          echo "::warning::Token quá ngắn — kiểm tra đã dán đủ cả chuỗi sau khi Generate."
-        fi
-        printf '%s' "$p" | docker login docker.io --username "$u" --password-stdin
-        echo "DOCKER_USER_NORMALIZED=${u}" >> "${GITHUB_ENV}"
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build and push to Docker Hub
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ env.DOCKER_USER_NORMALIZED }}/dinhminhngocthang-app:latest
-          ${{ env.DOCKER_USER_NORMALIZED }}/dinhminhngocthang-app:${{ github.sha }}
-        platforms: linux/amd64,linux/arm64
-
-    - name: Triển khai lên slot S5
-      run: |
-        REPO="${DOCKER_USER_NORMALIZED}/dinhminhngocthang-app"
-        CONTAINER_PORT=80
-        RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "${{ secrets.DEPLOY_URL }}?repo=$REPO&tag=latest&slot=5&container_port=$CONTAINER_PORT&strict_container_port=0")
-        BODY=$(echo "$RESPONSE" | sed '$d')
-        CODE=$(echo "$RESPONSE" | tail -n1)
-        echo "Webhook HTTP: $CODE"
-        if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then
-          echo "Deploy thất bại. Xem chi tiết trong nhóm log bên dưới."
-          echo "::group::Chi tiết webhook JSON"
-          echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
-          echo "::endgroup::"
-          exit 1
-        fi
-        echo "Deploy thành công."
-        echo "::group::Chi tiết webhook JSON"
-        echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
-        echo "::endgroup::"
+      # 3. Build & Push
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/springboot-app:latest
